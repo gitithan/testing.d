@@ -3,8 +3,19 @@
 ;;; Code:
 
 
-;;;### (autoloads nil nil ("auto-complete-config.el" "auto-complete-pkg.el"
-;;;;;;  "auto-complete.el") (20440 53949 416000))
+;;;### (autoloads (auto-complete) "auto-complete" "auto-complete.el"
+;;;;;;  (20507 18290))
+;;; Generated autoloads from auto-complete.el
+
+(autoload 'auto-complete "auto-complete" "\
+Start auto-completion at current point.
+
+\(fn &optional SOURCES)" t nil)
+
+;;;***
+
+;;;### (autoloads nil nil ("auto-complete-config.el" "auto-complete-pkg.el")
+;;;;;;  (20507 18291 853000))
 
 ;;;***
 
