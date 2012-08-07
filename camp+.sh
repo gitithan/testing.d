@@ -112,7 +112,7 @@ service dovecot stop; chkconfig dovecot off;
 service mailman stop; chkconfig mailman off;
 
 # update webmin configure
-echo 'lang_root=zh_CN' >> /etc/webmin/config
+echo 'lang=zh_CN' >> /etc/webmin/config
 sed --in-place -e 's/1048576//g' /etc/webmin/virtual-server/plans/0
 
 rm -f /etc/webmin/virtual-server/config_bak;
@@ -155,7 +155,7 @@ wget http://canmp.googlecode.com/files/zend.sh;sh zend.sh;
 
 
 #Install nginx
-#wget http://canmp.googlecode.com/files/canmp_nginx.sh;sh canmp_nginx.sh;
+wget http://canmp.googlecode.com/files/canmp_nginx.sh;sh canmp_nginx.sh;
 
 #finish
 wget http://canmp.googlecode.com/files/show.sh;sh show.sh;
