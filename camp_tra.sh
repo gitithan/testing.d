@@ -112,7 +112,7 @@ service dovecot stop; chkconfig dovecot off;
 service mailman stop; chkconfig mailman off;
 
 # update webmin configure
-echo 'lang_root=zh_CN' >> /etc/webmin/config
+echo 'lang=zh_CN' >> /etc/webmin/config
 sed --in-place -e 's/1048576//g' /etc/webmin/virtual-server/plans/0
 
 rm -f /etc/webmin/virtual-server/config_bak;
@@ -139,23 +139,23 @@ rm -f /var/www/error/noindex.html;
 wget http://canmp.googlecode.com/files/noindex.html --output-document=/var/www/error/noindex.html;
 
 #insta;; rpaf_module
-#wget http://canmp.googlecode.com/files/rpaf.sh;sh rpaf.sh;
+wget http://canmp.googlecode.com/files/rpaf.sh;sh rpaf.sh;
 
 #Install suhosin v0.9.31
-#wget http://canmp.googlecode.com/files/suhosin.sh;sh suhosin.sh;
+wget http://canmp.googlecode.com/files/suhosin.sh;sh suhosin.sh;
 
 # Install ionCube v4.0.12
 wget http://canmp.googlecode.com/files/ionCube.sh;sh ionCube.sh;
 
 #Install eacclerator v0.9.5.3 
-#wget http://canmp.googlecode.com/files/eaccelerator.sh;sh eaccelerator.sh;
+wget http://canmp.googlecode.com/files/eaccelerator.sh;sh eaccelerator.sh;
 
 # Install zend optimizer v3.3.9
 wget http://canmp.googlecode.com/files/zend.sh;sh zend.sh;
 
 
 #Install nginx
-#wget http://canmp.googlecode.com/files/canmp_nginx.sh;sh canmp_nginx.sh;
+wget http://canmp.googlecode.com/files/canmp_nginx.sh;sh canmp_nginx.sh;
 
 #finish
 wget http://canmp.googlecode.com/files/show.sh;sh show.sh;
