@@ -1,0 +1,308 @@
+diff -uN src1/w32fns.c src2/w32fns.c
+--- src1/w32fns.c	2012-05-14 20:00:02.000000000 +0800
++++ src2/w32fns.c	2012-08-20 15:10:28.940394900 +0800
+@@ -154,8 +154,14 @@
+ typedef HWND (WINAPI * ImmSetCompositionWindow_Proc) (IN HIMC context,
+ 						      IN COMPOSITIONFORM *form);
+ typedef HMONITOR (WINAPI * MonitorFromPoint_Proc) (IN POINT pt, IN DWORD flags);
++typedef HMONITOR (WINAPI * MonitorFromWindow_Proc)
++  (IN HWND hwnd, IN DWORD dwFlags);
+ typedef BOOL (WINAPI * GetMonitorInfo_Proc)
+   (IN HMONITOR monitor, OUT struct MONITOR_INFO* info);
++typedef BOOL (CALLBACK * MONITOR_ENUM_PROC) (HMONITOR, HDC, LPRECT, LPARAM);
++typedef BOOL (WINAPI * EnumDisplayMonitors_Proc)
++  (IN HDC hdc, IN LPCRECT lprcClip, IN MONITOR_ENUM_PROC lpfnEnum,
++   IN LPARAM dwData);
+ 
+ TrackMouseEvent_Proc track_mouse_event_fn = NULL;
+ ImmGetCompositionString_Proc get_composition_string_fn = NULL;
+@@ -163,7 +169,9 @@
+ ImmReleaseContext_Proc release_ime_context_fn = NULL;
+ ImmSetCompositionWindow_Proc set_ime_composition_window_fn = NULL;
+ MonitorFromPoint_Proc monitor_from_point_fn = NULL;
++MonitorFromWindow_Proc monitor_from_window_fn = NULL;
+ GetMonitorInfo_Proc get_monitor_info_fn = NULL;
++EnumDisplayMonitors_Proc enum_display_monitors_fn = NULL;
+ 
+ extern AppendMenuW_Proc unicode_append_menu;
+ 
+@@ -343,7 +351,77 @@
+   *yptr = rect.top;
+ }
+ 
+-
++
++void
++w32_set_fullscreen(f)
++     struct frame *f;
++{
++#ifdef HAVE_WINDOW_SYSTEM
++  if (f)
++    {
++      HWND hwnd = FRAME_W32_WINDOW (f);
++      if (f->want_fullscreen != FULLSCREEN_BOTH
++          && f->output_data.w32->fullscreen)
++        {
++          /* Restore the window style and placement. */
++          f->output_data.w32->fullscreen = 0;
++          if (f->output_data.w32->window_placement.showCmd == SW_HIDE)
++            {
++              SetWindowLong (hwnd, GWL_STYLE,
++                  f->output_data.w32->dwStyle | WS_CLIPCHILDREN);
++              SetWindowPos (hwnd, HWND_TOP, 30, 30, 640, 480,
++                  SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
++            }
++          else
++            {
++              SetWindowLong (hwnd, GWL_STYLE, f->output_data.w32->style);
++              SetWindowPlacement (hwnd, &f->output_data.w32->window_placement);
++              SetWindowPos (hwnd, HWND_TOP, 0, 0, 0, 0,
++                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
++            }
++        }
++      else if (f->want_fullscreen == FULLSCREEN_BOTH
++               && !f->output_data.w32->fullscreen)
++        {
++          /* Save the window style and placement. */
++          struct MONITOR_INFO info;
++          RECT monitor_rect;
++          monitor_rect.left = 0;
++          monitor_rect.right = GetSystemMetrics (SM_CXSCREEN);
++          monitor_rect.top = 0;
++          monitor_rect.bottom = GetSystemMetrics (SM_CYSCREEN);
++
++          f->output_data.w32->fullscreen = 1;
++          f->output_data.w32->window_placement.length =
++          sizeof (WINDOWPLACEMENT);
++          GetWindowPlacement (hwnd, &f->output_data.w32->window_placement);
++
++          f->output_data.w32->style = GetWindowLong (hwnd, GWL_STYLE);
++          SetWindowLong (hwnd, GWL_STYLE,
++              (  f->output_data.w32->style
++               & (~(WS_CAPTION | WS_THICKFRAME))));
++
++          /* If multiple monitor support is available, make the window
++             fullscreen on the appropriate screen. */
++          if (monitor_from_window_fn && get_monitor_info_fn)
++            {
++              f->output_data.w32->monitor =
++                  monitor_from_window_fn (hwnd, MONITOR_DEFAULT_TO_NEAREST);
++              info.cbSize = sizeof (struct MONITOR_INFO);
++              get_monitor_info_fn (f->output_data.w32->monitor, &info);
++              monitor_rect = info.rcMonitor;
++            }
++
++          SetWindowPos (FRAME_W32_WINDOW(f), HWND_TOP, monitor_rect.left,
++              monitor_rect.top, monitor_rect.right - monitor_rect.left,
++              monitor_rect.bottom - monitor_rect.top,
++              SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
++        }
++    }
++#endif
++}
++
++ 
+ 
+ DEFUN ("w32-define-rgb-color", Fw32_define_rgb_color,
+        Sw32_define_rgb_color, 4, 4, 0,
+@@ -2555,6 +2633,32 @@
+   my_post_msg (&wmsg, hwnd, msg, wParam, lParam);
+ }
+ 
++
++struct w32_monitor_info
++{
++    HMONITOR seeking;
++    int found;
++};
++
++
++static BOOL CALLBACK
++w32_enum_monitors (hMonitor, hdcMonitor, lprcMonitor, dwData)
++    HMONITOR hMonitor;
++    HDC hdcMonitor;
++    LPRECT lprcMonitor;
++    LPARAM dwData;
++{
++  struct w32_monitor_info* minfo =
++      (struct w32_monitor_info*) dwData;
++  if (minfo->seeking == hMonitor)
++    {
++      minfo->found = 1;
++      return FALSE;
++    }
++  return TRUE;
++}
++
++
+ /* Main window procedure */
+ 
+ static LRESULT CALLBACK
+@@ -2612,6 +2716,65 @@
+ 	    release_frame_dc (f, get_frame_dc (f));
+ 	}
+       return 0;
++    case WM_DISPLAYCHANGE:
++      f = x_window_to_frame (dpyinfo, hwnd);
++      if (f && f->output_data.w32->fullscreen)
++        {
++          /* If multiple monitor support is available, check if the monitor
++             the window was fullscreened on still exists. If not, kick it out
++             of fullscreen and let Windows reposition it. */
++          if (monitor_from_window_fn && get_monitor_info_fn
++              && enum_display_monitors_fn)
++            {
++              struct w32_monitor_info minfo = {
++                  f->output_data.w32->monitor, 0
++              };
++              enum_display_monitors_fn (NULL, NULL, w32_enum_monitors,
++                  (LPARAM) &minfo);
++              if (!minfo.found)
++                {
++                  f->output_data.w32->fullscreen = 0;
++
++                  if (f->output_data.w32->window_placement.showCmd == SW_HIDE)
++                    {
++                      SetWindowLong (hwnd, GWL_STYLE,
++                          f->output_data.w32->dwStyle | WS_CLIPCHILDREN);
++                      SetWindowPos (hwnd, HWND_TOP, 30, 30, 640, 480,
++                          SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
++                    }
++                  else
++                    {
++                      SetWindowLong (hwnd, GWL_STYLE, f->output_data.w32->style);
++                      SetWindowPlacement (hwnd,
++                          &f->output_data.w32->window_placement);
++                      SetWindowPos (hwnd, HWND_TOP, 0, 0, 0, 0,
++                          (SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
++                           | SWP_FRAMECHANGED));
++                    }
++                }
++              else
++                {
++                  /* The monitor still exists. Resize to fullscreen to account
++                    for a possible resolution change. */
++                  struct MONITOR_INFO info;
++                  info.cbSize = sizeof(struct MONITOR_INFO);
++                  get_monitor_info_fn (f->output_data.w32->monitor, &info);
++                  SetWindowPos (hwnd, HWND_TOP, info.rcMonitor.left,
++                      info.rcMonitor.top,
++                      info.rcMonitor.right - info.rcMonitor.left,
++                      info.rcMonitor.bottom - info.rcMonitor.top,
++                      SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
++                }
++            }
++          else
++            {
++              /* Resize to fullscreen to account for resolution change. */
++              SetWindowPos (hwnd, HWND_TOP, 0, 0, GetSystemMetrics(SM_CXSCREEN),
++                  GetSystemMetrics(SM_CYSCREEN),
++                  SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
++            }
++        }
++      return 0;
+     case WM_PAINT:
+       {
+   	PAINTSTRUCT paintStruct;
+@@ -3691,9 +3854,43 @@
+ 
+     case WM_EMACS_SETWINDOWPOS:
+       {
+-	WINDOWPOS * pos = (WINDOWPOS *) wParam;
+-	return SetWindowPos (hwnd, pos->hwndInsertAfter,
+-			     pos->x, pos->y, pos->cx, pos->cy, pos->flags);
++        f = x_window_to_frame (dpyinfo, hwnd);
++        if (f && f->output_data.w32->fullscreen)
++          {
++            SetWindowLong (hwnd, GWL_STYLE,
++                           (  f->output_data.w32->style
++                            & (~(WS_CAPTION | WS_THICKFRAME))));
++
++            /* Force the window to be fullscreen. This will cause frame
++               position and size changes to be ignored. It also keeps the
++               window correctly fullscreen when the menu or scroll bars are
++               toggled. */
++            if (monitor_from_window_fn && get_monitor_info_fn
++                &&  enum_display_monitors_fn)
++              {
++                struct MONITOR_INFO info;
++                info.cbSize = sizeof (struct MONITOR_INFO);
++                get_monitor_info_fn (f->output_data.w32->monitor, &info);
++                return SetWindowPos (hwnd, HWND_TOP, info.rcMonitor.left,
++                    info.rcMonitor.top,
++                    info.rcMonitor.right - info.rcMonitor.left,
++                    info.rcMonitor.bottom - info.rcMonitor.top,
++                    SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
++              }
++            else
++              {
++                return SetWindowPos (hwnd, HWND_TOP, 0, 0,
++                    GetSystemMetrics(SM_CXSCREEN),
++                    GetSystemMetrics(SM_CYSCREEN),
++                    SWP_NOSENDCHANGING | SWP_SHOWWINDOW);
++              }
++          }
++        else
++          {
++            WINDOWPOS * pos = (WINDOWPOS *) wParam;
++            return SetWindowPos (hwnd, pos->hwndInsertAfter,
++                pos->x, pos->y, pos->cx, pos->cy, pos->flags);
++          }
+       }
+ 
+     case WM_EMACS_DESTROYWINDOW:
+@@ -7162,8 +7359,12 @@
+ 
+   monitor_from_point_fn = (MonitorFromPoint_Proc)
+     GetProcAddress (user32_lib, "MonitorFromPoint");
++  monitor_from_window_fn = (MonitorFromWindow_Proc)
++    GetProcAddress (user32_lib, "MonitorFromWindow");
+   get_monitor_info_fn = (GetMonitorInfo_Proc)
+     GetProcAddress (user32_lib, "GetMonitorInfoA");
++  enum_display_monitors_fn = (EnumDisplayMonitors_Proc)
++    GetProcAddress (user32_lib, "EnumDisplayMonitors");
+ 
+   {
+     HMODULE imm32_lib = GetModuleHandle ("imm32.dll");
+diff -uN src1/w32term.c src2/w32term.c
+--- src1/w32term.c	2012-05-14 20:00:02.000000000 +0800
++++ src2/w32term.c	2012-08-20 15:10:29.092914200 +0800
+@@ -6072,7 +6072,7 @@
+   terminal->mouse_position_hook = w32_mouse_position;
+   terminal->frame_rehighlight_hook = w32_frame_rehighlight;
+   terminal->frame_raise_lower_hook = w32_frame_raise_lower;
+-  /* terminal->fullscreen_hook = XTfullscreen_hook; */
++  terminal->fullscreen_hook = w32_set_fullscreen;
+   terminal->set_vertical_scroll_bar_hook = w32_set_vertical_scroll_bar;
+   terminal->condemn_scroll_bars_hook = w32_condemn_scroll_bars;
+   terminal->redeem_scroll_bar_hook = w32_redeem_scroll_bar;
+diff -uN src1/w32term.h src2/w32term.h
+--- src1/w32term.h	2012-04-08 11:03:02.000000000 +0800
++++ src2/w32term.h	2012-08-20 15:10:29.115917200 +0800
+@@ -69,6 +69,7 @@
+ };
+ 
+ extern void w32_regenerate_palette (struct frame *f);
++extern void w32_set_fullscreen (struct frame *f);
+ 
+ 
+ /* For each display (currently only one on w32), we have a structure that
+@@ -336,6 +337,18 @@
+   /* The background for which the above relief GCs were set up.
+      They are changed only when a different background is involved.  */
+   unsigned long relief_background;
++
++  /* Nonzero means the frame is in fullscreen mode. */
++  char fullscreen;
++
++  /* Window placement prior to the frame going fullscreen. */
++  WINDOWPLACEMENT window_placement;
++
++  /* Window style in place when the frame went fullscreen. */
++  DWORD style;
++
++  /* Monitor that the frame is fullscreen on. */
++  HMONITOR monitor;
+ };
+ 
+ extern struct w32_output w32term_display;
