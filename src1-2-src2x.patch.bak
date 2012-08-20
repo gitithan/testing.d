@@ -1,5 +1,6 @@
---- emacs-24.1/src/w32fns.c	2012-05-14 20:00:02.000000000 +0800
-+++ fullscreen/src/w32fns.c	2012-08-08 12:50:23.045055400 +0800
+diff -uN src1/w32fns.c src2/w32fns.c
+--- src1/w32fns.c	2012-05-14 20:00:02.000000000 +0800
++++ src2/w32fns.c	2012-08-20 15:10:28.940394900 +0800
 @@ -154,8 +154,14 @@
  typedef HWND (WINAPI * ImmSetCompositionWindow_Proc) (IN HIMC context,
  						      IN COMPOSITIONFORM *form);
@@ -104,7 +105,7 @@
  
  DEFUN ("w32-define-rgb-color", Fw32_define_rgb_color,
         Sw32_define_rgb_color, 4, 4, 0,
-@@ -2555,6 +2628,32 @@
+@@ -2555,6 +2633,32 @@
    my_post_msg (&wmsg, hwnd, msg, wParam, lParam);
  }
  
@@ -137,7 +138,7 @@
  /* Main window procedure */
  
  static LRESULT CALLBACK
-@@ -2612,6 +2711,65 @@
+@@ -2612,6 +2716,65 @@
  	    release_frame_dc (f, get_frame_dc (f));
  	}
        return 0;
@@ -203,7 +204,7 @@
      case WM_PAINT:
        {
    	PAINTSTRUCT paintStruct;
-@@ -3691,9 +3849,43 @@
+@@ -3691,9 +3854,43 @@
  
      case WM_EMACS_SETWINDOWPOS:
        {
@@ -250,7 +251,7 @@
        }
  
      case WM_EMACS_DESTROYWINDOW:
-@@ -7162,8 +7354,12 @@
+@@ -7162,8 +7359,12 @@
  
    monitor_from_point_fn = (MonitorFromPoint_Proc)
      GetProcAddress (user32_lib, "MonitorFromPoint");
@@ -263,8 +264,9 @@
  
    {
      HMODULE imm32_lib = GetModuleHandle ("imm32.dll");
---- emacs-24.1/src/w32term.c	2012-05-14 20:00:02.000000000 +0800
-+++ fullscreen/src/w32term.c	2012-08-08 12:48:58.910243200 +0800
+diff -uN src1/w32term.c src2/w32term.c
+--- src1/w32term.c	2012-05-14 20:00:02.000000000 +0800
++++ src2/w32term.c	2012-08-20 15:10:29.092914200 +0800
 @@ -6072,7 +6072,7 @@
    terminal->mouse_position_hook = w32_mouse_position;
    terminal->frame_rehighlight_hook = w32_frame_rehighlight;
@@ -274,8 +276,9 @@
    terminal->set_vertical_scroll_bar_hook = w32_set_vertical_scroll_bar;
    terminal->condemn_scroll_bars_hook = w32_condemn_scroll_bars;
    terminal->redeem_scroll_bar_hook = w32_redeem_scroll_bar;
---- emacs-24.1/src/w32term.h	2012-04-08 11:03:02.000000000 +0800
-+++ fullscreen/src/w32term.h	2012-08-08 12:49:39.330555100 +0800
+diff -uN src1/w32term.h src2/w32term.h
+--- src1/w32term.h	2012-04-08 11:03:02.000000000 +0800
++++ src2/w32term.h	2012-08-20 15:10:29.115917200 +0800
 @@ -69,6 +69,7 @@
  };
  
